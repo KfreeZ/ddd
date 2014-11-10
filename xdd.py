@@ -43,18 +43,11 @@ class T_Serial(threading.Thread):
         cdMngr.queryCards()
 
 class SerialIO:
-    mySerial = None
-    def __init__(self):
-        try:
-            mySerial = serial.Serial('/dev/ttyAMA0', 9600, timeout=0)
-            print mySerial.name
-        except Exception, ex:
-            print str(ex)
-
+    
 
     def writeSerial(self, content):
         try:
-            mySerial.write(content)
+            SerialIO.mySerial.write(content)
             print "write serial"
         except Exception, ex:
             print str(ex)
@@ -93,67 +86,97 @@ class CmdGenerator:
         return timeByteArray
 
     def gnrtRstCmd(self, devId):
-        resetCmd = template_ResetRcvr  
+        resetCmd = CmdGenerator.template_ResetRcvr  
         resetCmd[2] = devId
-        cmdBody = bytearray(resetCmd[2], resetCmd[3], resetCmd[4])
-        crcArray = self.calcCrc(cmdBody)
+        rstCmdBody = bytearray([resetCmd[2], resetCmd[3], resetCmd[4]])
+        crcArray = self.calcCrc(rstCmdBody)
         # attention: reverse the sequence
-        ResetCmd[5] = crcArray[1]
-        ResetCmd[6] = crcArray[0]
+        resetCmd[5] = crcArray[1]
+        resetCmd[6] = crcArray[0]
+        return resetCmd
 
     def gnrtQueryCmd(self, devId, prevAddr, prevSn):
-        queryCmd = template_ResetRcvr  
+        queryCmd = CmdGenerator.template_QueryCards  
         queryCmd[2] = devId
         queryCmd[5] = prevAddr
-        queryCmd[6] = prevAddr
-        cmdBody = bytearray(queryCmd[2], queryCmd[3], queryCmd[4], queryCmd[5], queryCmd[6], queryCmd[7], queryCmd[8], queryCmd[9], queryCmd[10], queryCmd[11])
-        crcArray = self.calcCrc(cmdBody)
+        queryCmd[6] = prevSn
+        qryCmdBody = bytearray([queryCmd[2], queryCmd[3], queryCmd[4], queryCmd[5], queryCmd[6], queryCmd[7]])
+        crcArray = self.calcCrc(qryCmdBody)
         # attention: reverse the sequence
         queryCmd[8] = crcArray[1]
         queryCmd[9] = crcArray[0]
+        return queryCmd
 
-    def gnrtSetTimeCmd(self, devId):
-        setTimeCmd = template_SetTime
+    def gnrtSetTimeCmd(self):
+        setTimeCmd = CmdGenerator.template_SetTime
         timeByteArray = self.getTimebyteArray()
         for x in xrange(0, 7):
             setTimeCmd[5+x] = timeByteArray[x]
-        cmdBody = bytearray(queryCmd[2], queryCmd[3], queryCmd[4], queryCmd[5], queryCmd[6], queryCmd[7])
-        crcArray = self.calcCrc(cmdBody)
+        stCmdBody = bytearray([setTimeCmd[2], setTimeCmd[3], setTimeCmd[4], setTimeCmd[5], setTimeCmd[6], setTimeCmd[7], setTimeCmd[8], setTimeCmd[9], setTimeCmd[10], setTimeCmd[11]])
+        crcArray = self.calcCrc(stCmdBody)
         # attention: reverse the sequence
         setTimeCmd[12] = crcArray[1]
         setTimeCmd[13] = crcArray[0]
+        return setTimeCmd
 
 class CardManager:
-    sIO = None
-    def __init__(self):
-        sIO = SerialIO()
-        cmdGnrtr = CmdGenerator();
+    mySerial = serial.Serial('/dev/ttyAMA0', 9600, timeout=0)
+    cmdGnrtr = CmdGenerator()
+    DEBUGMODE = True
+    global prevAddr
+    global prevSn
+
+    def setPrevAddr(self, value):
+        CardManager.prevAddr = value
+
+    def setPrevSn(self, value):
+        CardManager.prevSn = value
+
+    def getPrevAddr(self):
+        return CardManager.prevAddr
+
+    def getPrevSn(self):
+        return CardManager.prevSn
 
     def initCardRcvr(self, devId):
-        rstCmd = cmdGnrtr.gnrtRstCmd(addr)
-        sIO.writeSerial(rstCmd)
+        rstCmd = CardManager.cmdGnrtr.gnrtRstCmd(devId)
+        CardManager.mySerial.write(rstCmd)
 
-    def setCardRcvrTime(self, devId):
-        setTimeCmd = cmdGnrtr.gnrtSetTimeCmd(devId)
-        sIO.writeSerial(setTimeCmd)
+    def setCardRcvrTime(self):
+        setTimeCmd = CardManager.cmdGnrtr.gnrtSetTimeCmd()
+        CardManager.mySerial.write(setTimeCmd)
 
-    def readAllCards(self, devId):
-        queryCmd = cmdGnrtr.gnrtQueryCmd(devId, 0xFF, 0x00)
-        sIO.writeSerial(queryCmd)
+    def sendQueryCmd(self, devId, lastAddr, lastSn):
+        queryCmd = CardManager.cmdGnrtr.gnrtQueryCmd(devId, lastAddr, lastSn)
+        CardManager.mySerial.write(queryCmd)
 
-    def saveResults(self):
-        print "save results"
+    def saveResults(self, buf):
+        self.setPrevAddr(0xEE)
+        self.setPrevSn(0x22)
 
-    def clearOldcardsAndReadNewCards(self):
-        print "analyzing..."
+    def startCapture(self):
+        print self.getPrevAddr()
+        print self.getPrevSn()
+
+    def stopCapture(self):
+        self.setPrevAddr(0xFF)
+        self.setPrevSn(0x00)
+        print self.getPrevAddr()
+        print self.getPrevSn()
 
     def queryCards(self):
         # set the id = 1 for demo
-        self.readAllCards(1)
-        while self.alive:
-            self.saveResults();
-            self.clearOldcardsAndReadNewCards()
-            time.sleep(1);
+        self.setPrevAddr(0xFF)
+        self.setPrevSn(0x00)
+        while (1):
+            self.sendQueryCmd(1, self.getPrevAddr(), self.getPrevSn())
+            time.sleep(1)
+            rcvd = CardManager.mySerial.read(150)
+            if self.saveResults(rcvd):
+                self.startCapture()
+            else:
+                self.stopCapture()
+
 
 
 
@@ -168,7 +191,7 @@ if __name__ == '__main__':
     mutex = threading.Lock()
 
     # creat snap thread
-    threads.append(T_SnapShot(10))
+    # threads.append(T_SnapShot(10))
     # creat serial thread
     threads.append(T_Serial())
 
