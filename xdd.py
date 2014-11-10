@@ -4,6 +4,7 @@ import string, threading, time
 import serial
 import crc16
 import struct
+import bitstring
 
 class T_SnapShot(threading.Thread):
     def initCam(self):
@@ -42,18 +43,6 @@ class T_Serial(threading.Thread):
         cdMngr.setCardRcvrTime()
         cdMngr.queryCards()
 
-class SerialIO:
-    
-
-    def writeSerial(self, content):
-        try:
-            SerialIO.mySerial.write(content)
-            print "write serial"
-        except Exception, ex:
-            print str(ex)
-
-    def readSerial(self):
-        print "read serial"
 
         
 class CmdGenerator:
@@ -122,6 +111,8 @@ class CmdGenerator:
 class CardManager:
     mySerial = serial.Serial('/dev/ttyAMA0', 9600, timeout=0)
     cmdGnrtr = CmdGenerator()
+    msgParser = MsgParser()
+
     DEBUGMODE = True
     global prevAddr
     global prevSn
@@ -150,9 +141,30 @@ class CardManager:
         queryCmd = CardManager.cmdGnrtr.gnrtQueryCmd(devId, lastAddr, lastSn)
         CardManager.mySerial.write(queryCmd)
 
-    def saveResults(self, buf):
-        self.setPrevAddr(0xEE)
-        self.setPrevSn(0x22)
+    def rcvLegalMsg(self, buf):
+        if (len(buf) == 0):
+            return False
+
+        if(self.DEBUGMODE == True):
+            print buf
+
+        if ((buf[0] == 0x7E) && (buf[1] == 0x3E) && (buf[len(buf)] == 0x3C) && (buf[4] == 0x80)):
+            return True
+        else:
+            if(self.DEBUGMODE == True):
+                print "revceive illegal message"
+            return False
+
+    def saveResults(buf):
+        cardNum = msgParser.getCardCnt(buf[6])
+        for x in xrange(0, cardNum):
+            cardInfoByteArray = msgParser.getCardInfo(buf, x)
+            cardId = msgParser.getCardId(cardInfoByteArray)
+            timeStamp = msgParser.getTimeStamp(cardInfoByteArray)
+            if(self.DEBUGMODE == True):
+                print ("get card %d at %s ")
+
+
 
     def startCapture(self):
         print self.getPrevAddr()
@@ -169,16 +181,41 @@ class CardManager:
         self.setPrevAddr(0xFF)
         self.setPrevSn(0x00)
         while (1):
-            self.sendQueryCmd(1, self.getPrevAddr(), self.getPrevSn())
+            # self.sendQueryCmd(1, self.getPrevAddr(), self.getPrevSn())
             time.sleep(1)
             rcvd = CardManager.mySerial.read(150)
-            if self.saveResults(rcvd):
+            print len(rcvd)
+            if self.rcvLegalMsg(rcvd):
+                self.saveResults(rcvd)
                 self.startCapture()
             else:
                 self.stopCapture()
 
+class MsgParser:
+    def getCardCnt(self, byteValue):
+        b = bitstring.BitArray(uint=byteValue, length = 8)
+        del b[:4]
+        return b
 
+    def getCardId(self, cardInfoArray):
+        cardIdByteArray = bytearray([cardInfoArray[0], cardInfoArray[1], cardInfoArray[2], cardInfoArray[3], cardInfoArray[4]])
+        bId = bitstring.BitArray(cardIdByteArray)
+        del bId[:4]
+        return bId
 
+    def getTimeStamp(self, cardInfoArray):
+        tsByteArray = bytearray([cardInfoArray[5], cardInfoArray[6], cardInfoArray[7]])
+        bTs = bitstring.BitArray(tsByteArray)
+        day = bTs[0:5]
+        hour = bTs[5:10]
+        minute = bTs[10:16]
+        second = bTs[16:22]
+        return "%d-%d:%d:%d" % (day.uint, hour.uint, minute.uint, second.uint)
+
+    def getCardInfo(self, buf, x):
+        cardInfo = bytearray(8)
+        for i in xrange(0, 8):
+            cardInfo[i] = buf[8*x+i]
 
 
 if __name__ == '__main__':
