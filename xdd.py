@@ -5,6 +5,7 @@ import serial
 import crc16
 import struct
 import bitstring
+import binascii
 
 class T_SnapShot(threading.Thread):
     def initCam(self):
@@ -12,33 +13,29 @@ class T_SnapShot(threading.Thread):
         camera.resolution = (2592, 1944)
         camera.start_preview()
 
-    def __init__(self, num):
+    def __init__(self, snapshotSignal):
         threading.Thread.__init__(self)
-        self._run_num = num
-        self.initCam()
+        self._signal = snapshotSignal
+        # self.initCam()
 
     def run(self):
-        global count, mutex
         threadname = threading.currentThread().getName()
-        for x in xrange(0, int(self._run_num)):
-            mutex.acquire()
-            count  = count + 1
-            mutex.release()
+        while (1):
+            self._signal.wait()
             timeString = time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
-            # print timeString
             # camera.capture('%s.jpg' % timeString)
-            # print time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
-            print threadname, x, count 
+            print threadname, timeString
             time.sleep(1)
 
 
 
 class T_Serial(threading.Thread):
-    def __init__(self):
+    def __init__(self, snapshotSignal):
         threading.Thread.__init__(self)
+        self._signal = snapshotSignal
 
     def run(self):
-        cdMngr = CardManager()
+        cdMngr = CardManager(self._signal)
         cdMngr.initCardRcvr(0x1)
         cdMngr.setCardRcvrTime()
         cdMngr.queryCards()
@@ -108,7 +105,34 @@ class CmdGenerator:
         setTimeCmd[13] = crcArray[0]
         return setTimeCmd
 
-class CardManager:
+class MsgParser:
+    def getCardCnt(self, byteValue):
+        b = bitstring.BitArray(uint=byteValue, length = 8)
+        del b[:4]
+        return b.uint
+
+    def getCardId(self, cardInfoArray):
+        cardIdByteArray = bytearray([cardInfoArray[0], cardInfoArray[1], cardInfoArray[2], cardInfoArray[3], cardInfoArray[4]])
+        bId = bitstring.BitArray(cardIdByteArray)
+        del bId[:4]
+        return bId.hex
+
+    def getTimeStamp(self, cardInfoArray):
+        tsByteArray = bytearray([cardInfoArray[5], cardInfoArray[6], cardInfoArray[7]])
+        bTs = bitstring.BitArray(tsByteArray)
+        day = bTs[0:5]
+        hour = bTs[5:10]
+        minute = bTs[10:16]
+        second = bTs[16:22]
+        return "%d-%d:%d:%d" % (day.uint, hour.uint, minute.uint, second.uint)
+
+    def getCardInfo(self, buf, x):
+        cardInfo = bytearray(8)
+        for i in xrange(0, 8):
+            cardInfo[i] = buf[8*(x-1)+i]
+        return cardInfo
+
+class CardManager():
     mySerial = serial.Serial('/dev/ttyAMA0', 9600, timeout=0)
     cmdGnrtr = CmdGenerator()
     msgParser = MsgParser()
@@ -116,6 +140,9 @@ class CardManager:
     DEBUGMODE = True
     global prevAddr
     global prevSn
+
+    def __init__(self, snapshotSignal):
+        self.__signal = snapshotSignal
 
     def setPrevAddr(self, value):
         CardManager.prevAddr = value
@@ -146,35 +173,39 @@ class CardManager:
             return False
 
         if(self.DEBUGMODE == True):
-            print buf
+            print binascii.hexlify(buf)
 
-        if ((buf[0] == 0x7E) && (buf[1] == 0x3E) && (buf[len(buf)] == 0x3C) && (buf[4] == 0x80)):
+        if ((buf[0] == b'\x7E') and (buf[1] == b'\x3E') and (buf[len(buf)-1] == b'\x3C') and (buf[4] == b'\x80')):
             return True
         else:
             if(self.DEBUGMODE == True):
                 print "revceive illegal message"
             return False
 
-    def saveResults(buf):
-        cardNum = msgParser.getCardCnt(buf[6])
+    def saveResults(self, buf):
+        cardNum = CardManager.msgParser.getCardCnt(ord(buf[6]))
+        self.setPrevAddr(buf[2])
+        self.setPrevSn(buf[5])
+
         for x in xrange(0, cardNum):
-            cardInfoByteArray = msgParser.getCardInfo(buf, x)
-            cardId = msgParser.getCardId(cardInfoByteArray)
-            timeStamp = msgParser.getTimeStamp(cardInfoByteArray)
+            cardInfoByteArray = CardManager.msgParser.getCardInfo(buf, x)
+            cardId = CardManager.msgParser.getCardId(cardInfoByteArray)
+            timeStamp = CardManager.msgParser.getTimeStamp(cardInfoByteArray)
             if(self.DEBUGMODE == True):
-                print ("get card %d at %s ")
-
-
+                print "get card %s at %s " % (cardId, timeStamp)
 
     def startCapture(self):
-        print self.getPrevAddr()
-        print self.getPrevSn()
+        print ord(self.getPrevAddr())
+        print ord(self.getPrevSn())
+        print "start capture"
+        self.__signal.set()
+
 
     def stopCapture(self):
         self.setPrevAddr(0xFF)
         self.setPrevSn(0x00)
-        print self.getPrevAddr()
-        print self.getPrevSn()
+        print "stop capture"
+        self.__signal.clear()
 
     def queryCards(self):
         # set the id = 1 for demo
@@ -184,53 +215,28 @@ class CardManager:
             # self.sendQueryCmd(1, self.getPrevAddr(), self.getPrevSn())
             time.sleep(1)
             rcvd = CardManager.mySerial.read(150)
-            print len(rcvd)
             if self.rcvLegalMsg(rcvd):
                 self.saveResults(rcvd)
                 self.startCapture()
             else:
                 self.stopCapture()
 
-class MsgParser:
-    def getCardCnt(self, byteValue):
-        b = bitstring.BitArray(uint=byteValue, length = 8)
-        del b[:4]
-        return b
 
-    def getCardId(self, cardInfoArray):
-        cardIdByteArray = bytearray([cardInfoArray[0], cardInfoArray[1], cardInfoArray[2], cardInfoArray[3], cardInfoArray[4]])
-        bId = bitstring.BitArray(cardIdByteArray)
-        del bId[:4]
-        return bId
-
-    def getTimeStamp(self, cardInfoArray):
-        tsByteArray = bytearray([cardInfoArray[5], cardInfoArray[6], cardInfoArray[7]])
-        bTs = bitstring.BitArray(tsByteArray)
-        day = bTs[0:5]
-        hour = bTs[5:10]
-        minute = bTs[10:16]
-        second = bTs[16:22]
-        return "%d-%d:%d:%d" % (day.uint, hour.uint, minute.uint, second.uint)
-
-    def getCardInfo(self, buf, x):
-        cardInfo = bytearray(8)
-        for i in xrange(0, 8):
-            cardInfo[i] = buf[8*x+i]
 
 
 if __name__ == '__main__':
     global count, mutex
 
-
+    permissionToSnapshot = threading.Event()
     threads = []
     count = 1
     # create lock
     mutex = threading.Lock()
 
-    # creat snap thread
-    # threads.append(T_SnapShot(10))
+    # creat snapshot thread
+    threads.append(T_SnapShot(permissionToSnapshot))
     # creat serial thread
-    threads.append(T_Serial())
+    threads.append(T_Serial(permissionToSnapshot))
 
     # start threads
     for t in threads:
