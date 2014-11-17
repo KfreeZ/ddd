@@ -7,7 +7,7 @@ import struct
 import bitstring
 import binascii
 import logging
-import signal
+
 
 class T_SnapShot(threading.Thread):
     def initCam(self):
@@ -248,15 +248,10 @@ class CardManager():
             else:
                 self.stopCapture()
 
-def sig_handler(sig, frame):
-    print ("sig: %d")%sig
-
 if __name__ == '__main__':
     LOG_FILE = "./debug.log"
     logging.basicConfig(filename=LOG_FILE,level=logging.DEBUG)
 
-    signal.signal(signal.SIGTERM, sig_handler)
-    signal.signal(signal.SIGINT, sig_handler)
 
     permissionToSnapshot = threading.Event()
     threads = []
