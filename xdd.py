@@ -6,6 +6,8 @@ import crc16
 import struct
 import bitstring
 import binascii
+import logging
+import signal
 
 class T_SnapShot(threading.Thread):
     def initCam(self):
@@ -13,15 +15,16 @@ class T_SnapShot(threading.Thread):
         camera.resolution = (2592, 1944)
         camera.start_preview()
 
-    def __init__(self, snapshotSignal):
+    def __init__(self):
         threading.Thread.__init__(self)
-        self._signal = snapshotSignal
-        # self.initCam()
+        self.initCam()
 
     def run(self):
+        global permissionToSnapshot
         threadname = threading.currentThread().getName()
         while (1):
-            self._signal.wait()
+            permissionToSnapshot.wait()
+            # self._signal.wait()
             timeString = time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
             # camera.capture('%s.jpg' % timeString)
             print threadname, timeString
@@ -30,16 +33,15 @@ class T_SnapShot(threading.Thread):
 
 
 class T_Serial(threading.Thread):
-    def __init__(self, snapshotSignal):
+    def __init__(self):
         threading.Thread.__init__(self)
-        self._signal = snapshotSignal
+        self._cdMngr = CardManager()
 
     def run(self):
-        cdMngr = CardManager(self._signal)
-        cdMngr.initCardRcvr(0x1)
-        cdMngr.setCardRcvrTime()
-        cdMngr.queryCards()
-
+        self._cdMngr.initCardRcvr(0x1)
+        # time.sleep(1)
+        self._cdMngr.setCardRcvrTime()
+        self._cdMngr.queryCards()
 
         
 class CmdGenerator:
@@ -50,7 +52,7 @@ class CmdGenerator:
     #                             ---head---  -id- -len- -cmd-  ---yr pt1---  ---yr pt2---  ----month---  ----date----  ----hour----  ----min-----  ----sec----- ---crc pt1--- ---crc pt2--- -tail
     template_SetTime = bytearray([0x7E, 0x3E, 0xFF, 0x09, 0x10, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, 0x3C])
     #                               ---head---  -----id-----  -len- -cmd- --prev addr-- ---prev sn---  ----rsrv----  ---crc pt1--- ---crc pt2-- -tail
-    template_QueryCards = bytearray([0x7E, 0x3E, VARIABLEBYTE, 0x05, 0x01, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, 0x3C])
+    template_QueryCards = bytearray([0x7E, 0x3E, VARIABLEBYTE, 0x05, 0x00, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, VARIABLEBYTE, 0x3C])
 
     def calcCrc(self, bytearray):
         retArray = [0, 0]
@@ -86,7 +88,12 @@ class CmdGenerator:
         queryCmd[2] = devId
         queryCmd[5] = prevAddr
         queryCmd[6] = prevSn
-        qryCmdBody = bytearray([queryCmd[2], queryCmd[3], queryCmd[4], queryCmd[5], queryCmd[6], queryCmd[7]])
+        qryCmdBody = bytearray([queryCmd[2],
+                                queryCmd[3],
+                                queryCmd[4],
+                                queryCmd[5],
+                                queryCmd[6],
+                                queryCmd[7]])
         crcArray = self.calcCrc(qryCmdBody)
         # attention: reverse the sequence
         queryCmd[8] = crcArray[1]
@@ -98,7 +105,16 @@ class CmdGenerator:
         timeByteArray = self.getTimebyteArray()
         for x in xrange(0, 7):
             setTimeCmd[5+x] = timeByteArray[x]
-        stCmdBody = bytearray([setTimeCmd[2], setTimeCmd[3], setTimeCmd[4], setTimeCmd[5], setTimeCmd[6], setTimeCmd[7], setTimeCmd[8], setTimeCmd[9], setTimeCmd[10], setTimeCmd[11]])
+        stCmdBody = bytearray([setTimeCmd[2],
+                               setTimeCmd[3],
+                               setTimeCmd[4],
+                               setTimeCmd[5],
+                               setTimeCmd[6],
+                               setTimeCmd[7],
+                               setTimeCmd[8],
+                               setTimeCmd[9],
+                               setTimeCmd[10],
+                               setTimeCmd[11]])
         crcArray = self.calcCrc(stCmdBody)
         # attention: reverse the sequence
         setTimeCmd[12] = crcArray[1]
@@ -112,13 +128,19 @@ class MsgParser:
         return b.uint
 
     def getCardId(self, cardInfoArray):
-        cardIdByteArray = bytearray([cardInfoArray[0], cardInfoArray[1], cardInfoArray[2], cardInfoArray[3], cardInfoArray[4]])
+        cardIdByteArray = bytearray([cardInfoArray[0],
+                                     cardInfoArray[1],
+                                     cardInfoArray[2],
+                                     cardInfoArray[3],
+                                     cardInfoArray[4]])
         bId = bitstring.BitArray(cardIdByteArray)
         del bId[:4]
         return bId.hex
 
     def getTimeStamp(self, cardInfoArray):
-        tsByteArray = bytearray([cardInfoArray[5], cardInfoArray[6], cardInfoArray[7]])
+        tsByteArray = bytearray([cardInfoArray[5],
+                                 cardInfoArray[6],
+                                 cardInfoArray[7]])
         bTs = bitstring.BitArray(tsByteArray)
         day = bTs[0:5]
         hour = bTs[5:10]
@@ -140,9 +162,7 @@ class CardManager():
     DEBUGMODE = True
     global prevAddr
     global prevSn
-
-    def __init__(self, snapshotSignal):
-        self.__signal = snapshotSignal
+    global permissionToSnapshot
 
     def setPrevAddr(self, value):
         CardManager.prevAddr = value
@@ -175,7 +195,11 @@ class CardManager():
         if(self.DEBUGMODE == True):
             print binascii.hexlify(buf)
 
-        if ((buf[0] == b'\x7E') and (buf[1] == b'\x3E') and (buf[len(buf)-1] == b'\x3C') and (buf[4] == b'\x80')):
+        if ((buf[0] == b'\x7E')
+            and (buf[1] == b'\x3E')
+            and (buf[len(buf)-1] == b'\x3C')
+            and (buf[4] == b'\x80')
+            and (buf[6] != b'\x00')):
             return True
         else:
             if(self.DEBUGMODE == True):
@@ -197,22 +221,25 @@ class CardManager():
     def startCapture(self):
         print ord(self.getPrevAddr())
         print ord(self.getPrevSn())
-        print "start capture"
-        self.__signal.set()
+        if(self.DEBUGMODE == True):
+            print "start capture"
+        permissionToSnapshot.set()
 
 
     def stopCapture(self):
         self.setPrevAddr(0xFF)
         self.setPrevSn(0x00)
-        print "stop capture"
-        self.__signal.clear()
+        if(self.DEBUGMODE == True):
+            print "capture siezed"
+            # logging.info("logging")
+        permissionToSnapshot.clear()
 
     def queryCards(self):
         # set the id = 1 for demo
         self.setPrevAddr(0xFF)
         self.setPrevSn(0x00)
         while (1):
-            # self.sendQueryCmd(1, self.getPrevAddr(), self.getPrevSn())
+            self.sendQueryCmd(1, self.getPrevAddr(), self.getPrevSn())
             time.sleep(1)
             rcvd = CardManager.mySerial.read(150)
             if self.rcvLegalMsg(rcvd):
@@ -221,26 +248,30 @@ class CardManager():
             else:
                 self.stopCapture()
 
-
-
+def sig_handler(sig, frame):
+    print ("sig: %d")%sig
 
 if __name__ == '__main__':
-    global count, mutex
+    LOG_FILE = "./debug.log"
+    logging.basicConfig(filename=LOG_FILE,level=logging.DEBUG)
+
+    signal.signal(signal.SIGTERM, sig_handler)
+    signal.signal(signal.SIGINT, sig_handler)
 
     permissionToSnapshot = threading.Event()
     threads = []
-    count = 1
-    # create lock
-    mutex = threading.Lock()
 
     # creat snapshot thread
-    threads.append(T_SnapShot(permissionToSnapshot))
+    threads.append(T_SnapShot())
     # creat serial thread
-    threads.append(T_Serial(permissionToSnapshot))
+    threads.append(T_Serial())
 
     # start threads
     for t in threads:
+        t.setDaemon(True)
         t.start()
-    # wait for exit
+
     for t in threads:
         t.join()
+
+    print "main thread running"
