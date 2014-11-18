@@ -7,7 +7,10 @@ import struct
 import bitstring
 import binascii
 import logging
-
+import json
+import requests
+from Queue import Queue
+import urllib2  
 
 class T_SnapShot(threading.Thread):
     def initCam(self):
@@ -17,10 +20,12 @@ class T_SnapShot(threading.Thread):
 
     def __init__(self):
         threading.Thread.__init__(self)
-        self.initCam()
+        threading.currentThread().setName("Capture thread")
+        # self.initCam()
 
     def run(self):
         global permissionToSnapshot
+
         threadname = threading.currentThread().getName()
         while (1):
             permissionToSnapshot.wait()
@@ -35,6 +40,7 @@ class T_SnapShot(threading.Thread):
 class T_Serial(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
+        threading.currentThread().setName("Serial thread")
         self._cdMngr = CardManager()
 
     def run(self):
@@ -43,6 +49,13 @@ class T_Serial(threading.Thread):
         self._cdMngr.setCardRcvrTime()
         self._cdMngr.queryCards()
 
+class T_Web(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        threading.currentThread().setName("Web thread")
+
+    def run(self):
+        print 0
         
 class CmdGenerator:
     # cmd = head + rcvrAddr + cmdLen + cmd + crc + tail
@@ -135,7 +148,7 @@ class MsgParser:
                                      cardInfoArray[4]])
         bId = bitstring.BitArray(cardIdByteArray)
         del bId[:4]
-        return bId.hex
+        return "%s" % bId.hex
 
     def getTimeStamp(self, cardInfoArray):
         tsByteArray = bytearray([cardInfoArray[5],
@@ -151,7 +164,7 @@ class MsgParser:
     def getCardInfo(self, buf, x):
         cardInfo = bytearray(8)
         for i in xrange(0, 8):
-            cardInfo[i] = buf[8*(x-1)+i]
+            cardInfo[i] = buf[7 + 8*x + i]
         return cardInfo
 
 class CardManager():
@@ -206,17 +219,47 @@ class CardManager():
                 print "revceive illegal message"
             return False
 
+    def sendJson(self, cardNum, cards, timeString):
+        if (cardNum > 1):
+            delimiter = '|'
+            cardString = delimiter.join(cards)
+        else:
+            cardString = cards[0] #use the [0] in case the string is wraped by []
+        
+        bullet = json.dumps({"card": cardString, "pass_time": timeString})
+        print bullet
+        # headers = {'Content-Type':'application/json; charset=utf8'} 
+        # requests.post("http://121.41.49.137:3000/mmt/create?token=TOKEN", params=bullet)
+        # print r.text
+        # req = urllib2.Request(  
+        #     url = 'http://121.41.49.137:3000/mmt/create?token=TOKEN',  
+        #     data = bullet,  
+        #     headers = headers  
+        # )
+
+        # result = urllib2.urlopen(req)  
+        # print result.read()  
+
+
     def saveResults(self, buf):
         cardNum = CardManager.msgParser.getCardCnt(ord(buf[6]))
         self.setPrevAddr(buf[2])
         self.setPrevSn(buf[5])
 
+        # get the system time instead of rcvr time for now
+        timeString = time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))
+        cardString = []
         for x in xrange(0, cardNum):
             cardInfoByteArray = CardManager.msgParser.getCardInfo(buf, x)
             cardId = CardManager.msgParser.getCardId(cardInfoByteArray)
-            timeStamp = CardManager.msgParser.getTimeStamp(cardInfoByteArray)
+            # timeStamp = CardManager.msgParser.getTimeStamp(cardInfoByteArray)
             if(self.DEBUGMODE == True):
-                print "get card %s at %s " % (cardId, timeStamp)
+                print "get card %s at %s " % (cardId, timeString)
+            cardString.append(cardId)
+
+        # self.sendJson(cardNum, cardString, timeString)
+
+
 
     def startCapture(self):
         print ord(self.getPrevAddr())
@@ -252,8 +295,8 @@ if __name__ == '__main__':
     LOG_FILE = "./debug.log"
     logging.basicConfig(filename=LOG_FILE,level=logging.DEBUG)
 
-
     permissionToSnapshot = threading.Event()
+    jsonQ = Queue()
     threads = []
 
     # creat snapshot thread
