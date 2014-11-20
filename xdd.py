@@ -1,6 +1,6 @@
 #!/usr/bin/env python  
 import picamera
-import string, threading, time
+import string, threading, time, datetime
 import serial
 import crc16
 import struct
@@ -10,7 +10,8 @@ import logging
 import json
 import requests
 from Queue import Queue
-import urllib2  
+import urllib2
+import os
 
 class T_SnapShot(threading.Thread):
     def initCam(self):
@@ -20,7 +21,7 @@ class T_SnapShot(threading.Thread):
 
     def __init__(self):
         threading.Thread.__init__(self)
-        threading.currentThread().setName("Capture thread")
+        threading.Thread.setName(self, "SnapShot Thread")
         # self.initCam()
 
     def run(self):
@@ -29,7 +30,6 @@ class T_SnapShot(threading.Thread):
         threadname = threading.currentThread().getName()
         while (1):
             permissionToSnapshot.wait()
-            # self._signal.wait()
             timeString = time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
             # camera.capture('%s.jpg' % timeString)
             print threadname, timeString
@@ -40,22 +40,43 @@ class T_SnapShot(threading.Thread):
 class T_Serial(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
-        threading.currentThread().setName("Serial thread")
+        threading.Thread.setName(self, "Serial Thread")
         self._cdMngr = CardManager()
 
     def run(self):
         self._cdMngr.initCardRcvr(0x1)
-        # time.sleep(1)
+        time.sleep(1)
         self._cdMngr.setCardRcvrTime()
         self._cdMngr.queryCards()
 
-class T_Web(threading.Thread):
+class T_NetWork(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
-        threading.currentThread().setName("Web thread")
+        threading.Thread.setName(self, "NetWork Thread")
 
     def run(self):
-        print 0
+        serialNo = 1
+        url = "http://192.168.123.101:3000/mmt/create?token=TOKEN"
+        while(1):
+            bullet = jsonQ.get()
+            folderLocation = './data/%s' % datetime.date.today()
+            if os.path.isdir(folderLocation):
+                pass
+            else:
+                os.mkdir(folderLocation)
+
+            fileLocation = '%s/cardRegistry' % folderLocation
+            cardRegistryFile = open(fileLocation, 'a', 0)
+
+            cardRegistryFile.write ("Msg %d: %s is ready to send to %s\n" % (serialNo, url, bullet))
+            try :
+                r = requests.post(url, data=bullet)
+                cardRegistryFile.write("Msg %d response: %s\n" % (serialNo, r.content))
+            except Exception, e:
+                cardRegistryFile.write(str(e))
+                cardRegistryFile.write('\n')
+            serialNo += 1
+
         
 class CmdGenerator:
     # cmd = head + rcvrAddr + cmdLen + cmd + crc + tail
@@ -220,25 +241,16 @@ class CardManager():
             return False
 
     def sendJson(self, cardNum, cards, timeString):
+        global jsonQ
         if (cardNum > 1):
             delimiter = '|'
             cardString = delimiter.join(cards)
         else:
             cardString = cards[0] #use the [0] in case the string is wraped by []
         
-        bullet = json.dumps({"card": cardString, "pass_time": timeString})
-        print bullet
-        # headers = {'Content-Type':'application/json; charset=utf8'} 
-        # requests.post("http://121.41.49.137:3000/mmt/create?token=TOKEN", params=bullet)
-        # print r.text
-        # req = urllib2.Request(  
-        #     url = 'http://121.41.49.137:3000/mmt/create?token=TOKEN',  
-        #     data = bullet,  
-        #     headers = headers  
-        # )
+        cardJson = {"card": cardString, "pass_time": timeString}
+        jsonQ.put(cardJson)
 
-        # result = urllib2.urlopen(req)  
-        # print result.read()  
 
 
     def saveResults(self, buf):
@@ -254,17 +266,18 @@ class CardManager():
             cardId = CardManager.msgParser.getCardId(cardInfoByteArray)
             # timeStamp = CardManager.msgParser.getTimeStamp(cardInfoByteArray)
             if(self.DEBUGMODE == True):
+                # print "rcvr time %s" % timeStamp
                 print "get card %s at %s " % (cardId, timeString)
             cardString.append(cardId)
 
-        # self.sendJson(cardNum, cardString, timeString)
+        self.sendJson(cardNum, cardString, timeString)
 
 
 
     def startCapture(self):
-        print ord(self.getPrevAddr())
-        print ord(self.getPrevSn())
         if(self.DEBUGMODE == True):
+            # print ord(self.getPrevAddr())
+            # print ord(self.getPrevSn())
             print "start capture"
         permissionToSnapshot.set()
 
@@ -294,6 +307,10 @@ class CardManager():
 if __name__ == '__main__':
     LOG_FILE = "./debug.log"
     logging.basicConfig(filename=LOG_FILE,level=logging.DEBUG)
+    if os.path.isdir('./data'):
+        pass
+    else:
+        os.mkdir('./data')
 
     permissionToSnapshot = threading.Event()
     jsonQ = Queue()
@@ -303,6 +320,8 @@ if __name__ == '__main__':
     threads.append(T_SnapShot())
     # creat serial thread
     threads.append(T_Serial())
+    # creat network thread
+    threads.append(T_NetWork())
 
     # start threads
     for t in threads:
