@@ -13,27 +13,34 @@ from Queue import Queue
 import urllib2
 import os
 
+DEVICEID = 1
+DEBUGMODE = True
+SVRIP = '192.168.123.104'
+
 class T_SnapShot(threading.Thread):
     def initCam(self):
         camera = picamera.PiCamera()
         camera.resolution = (2592, 1944)
-        camera.start_preview()
+        # camera.start_preview()
 
     def __init__(self):
         threading.Thread.__init__(self)
         threading.Thread.setName(self, "SnapShot Thread")
-        # self.initCam()
+        self.initCam()
 
     def run(self):
         global permissionToSnapshot
-
-        threadname = threading.currentThread().getName()
         while (1):
             permissionToSnapshot.wait()
             timeString = time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
             # camera.capture('%s.jpg' % timeString)
-            print threadname, timeString
+            if(DEBUGMODE == True):
+                threadname = threading.currentThread().getName()
+                logString = "%s: start snapshot at %s" % (threadname, timeString)
+                print logString
+                logging.info(logString)
             time.sleep(1)
+
 
 
 
@@ -44,10 +51,10 @@ class T_Serial(threading.Thread):
         self._cdMngr = CardManager()
 
     def run(self):
-        self._cdMngr.initCardRcvr(0x1)
+        self._cdMngr.initCardRcvr(DEVICEID)
         time.sleep(1)
         self._cdMngr.setCardRcvrTime()
-        self._cdMngr.queryCards()
+        self._cdMngr.queryCards(DEVICEID)
 
 class T_NetWork(threading.Thread):
     def __init__(self):
@@ -56,7 +63,7 @@ class T_NetWork(threading.Thread):
 
     def run(self):
         serialNo = 1
-        url = "http://192.168.123.101:3000/mmt/create?token=TOKEN"
+        url = "http://%s:3000/mmt/create?token=TOKEN" % SVRIP
         while(1):
             bullet = jsonQ.get()
             folderLocation = './data/%s' % datetime.date.today()
@@ -193,7 +200,6 @@ class CardManager():
     cmdGnrtr = CmdGenerator()
     msgParser = MsgParser()
 
-    DEBUGMODE = True
     global prevAddr
     global prevSn
     global permissionToSnapshot
@@ -226,7 +232,7 @@ class CardManager():
         if (len(buf) == 0):
             return False
 
-        if(self.DEBUGMODE == True):
+        if(DEBUGMODE == True):
             print binascii.hexlify(buf)
 
         if ((buf[0] == b'\x7E')
@@ -236,7 +242,7 @@ class CardManager():
             and (buf[6] != b'\x00')):
             return True
         else:
-            if(self.DEBUGMODE == True):
+            if(DEBUGMODE == True):
                 print "revceive illegal message"
             return False
 
@@ -265,9 +271,11 @@ class CardManager():
             cardInfoByteArray = CardManager.msgParser.getCardInfo(buf, x)
             cardId = CardManager.msgParser.getCardId(cardInfoByteArray)
             # timeStamp = CardManager.msgParser.getTimeStamp(cardInfoByteArray)
-            if(self.DEBUGMODE == True):
-                # print "rcvr time %s" % timeStamp
-                print "get card %s at %s " % (cardId, timeString)
+            if(DEBUGMODE == True):
+                name = threading.currentThread().getName()
+                logStr = "%s: get card %s at %s " % (name, cardId, timeString)
+                print logStr
+                logging.info(logStr)
             cardString.append(cardId)
 
         self.sendJson(cardNum, cardString, timeString)
@@ -275,7 +283,7 @@ class CardManager():
 
 
     def startCapture(self):
-        if(self.DEBUGMODE == True):
+        if(DEBUGMODE == True):
             # print ord(self.getPrevAddr())
             # print ord(self.getPrevSn())
             print "start capture"
@@ -285,17 +293,15 @@ class CardManager():
     def stopCapture(self):
         self.setPrevAddr(0xFF)
         self.setPrevSn(0x00)
-        if(self.DEBUGMODE == True):
+        if(DEBUGMODE == True):
             print "capture siezed"
-            # logging.info("logging")
         permissionToSnapshot.clear()
 
-    def queryCards(self):
-        # set the id = 1 for demo
+    def queryCards(self, devId):
         self.setPrevAddr(0xFF)
         self.setPrevSn(0x00)
         while (1):
-            self.sendQueryCmd(1, self.getPrevAddr(), self.getPrevSn())
+            self.sendQueryCmd(devId, self.getPrevAddr(), self.getPrevSn())
             time.sleep(1)
             rcvd = CardManager.mySerial.read(150)
             if self.rcvLegalMsg(rcvd):
@@ -314,6 +320,7 @@ if __name__ == '__main__':
 
     permissionToSnapshot = threading.Event()
     jsonQ = Queue()
+    fileQ = Queue()
     threads = []
 
     # creat snapshot thread
