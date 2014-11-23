@@ -19,9 +19,9 @@ SVRIP = '192.168.123.104'
 
 class T_SnapShot(threading.Thread):
     def initCam(self):
-        camera = picamera.PiCamera()
-        camera.resolution = (2592, 1944)
-        # camera.start_preview()
+        self.camera = picamera.PiCamera()
+        self.camera.resolution = (2592, 1944)
+        self.camera.start_preview()
 
     def __init__(self):
         threading.Thread.__init__(self)
@@ -32,17 +32,77 @@ class T_SnapShot(threading.Thread):
         global permissionToSnapshot
         while (1):
             permissionToSnapshot.wait()
+            picfolderLocation = './data/%s' % datetime.date.today()
+            if os.path.isdir(picfolderLocation):
+                pass
+            else:
+                os.mkdir(picfolderLocation)
+
             timeString = time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
-            # camera.capture('%s.jpg' % timeString)
+
             if(DEBUGMODE == True):
                 threadname = threading.currentThread().getName()
                 logString = "%s: start snapshot at %s" % (threadname, timeString)
                 print logString
                 logging.info(logString)
+
+            picName = '%s/%s.jpg' % (picfolderLocation, timeString)
+            self.camera.capture(picName)
             time.sleep(1)
+            fileQ.put(picName)
 
+class T_Uploader(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        threading.Thread.setName(self, "Upload Thread")
 
+    def run(self):
+        sequenceNo = 1
+        while(1):
+            pic = fileQ.get()
+            # wait 2s for the snapshot thread to create pic
+            time.sleep(2)
+            try :
+                folderLocation = './data/%s' % datetime.date.today()
+                if os.path.isdir(folderLocation):
+                    pass
+                else:
+                    os.mkdir(folderLocation)
 
+                fileLocation = '%s/upload.log' % folderLocation
+                uploadLogFile = open(fileLocation, 'a', 0)
+
+                url = 'http://%s:3000/image' % SVRIP
+
+                logString = "MSg %d: upload %s to server %s\n" % (sequenceNo, pic, url)
+                uploadLogFile.write(logString)
+
+                if(DEBUGMODE == True):
+                    print logString                    
+
+                createTime = pic[18:36]
+                snapShot = {'upload': ('pic', open(pic, 'rb'), 'image/jpeg')}
+                record = {
+                    'create_time' : createTime,
+                    'device_id' : DEVICEID,
+                    'cards' : '00000005f',
+                    'school_id' : 1
+                    }
+                r = requests.post(url, files=snapShot, data= record)
+                logString = "MSg %d: result %s\n" % (sequenceNo, r)
+                uploadLogFile.write(logString)
+
+                if(DEBUGMODE == True):
+                    print logString   
+
+            except Exception, e:
+                uploadLogFile.write(str(e))
+                uploadLogFile.write('\n')
+
+                if(DEBUGMODE == True):
+                    print str(e)   
+
+            sequenceNo += 1
 
 class T_Serial(threading.Thread):
     def __init__(self):
@@ -63,7 +123,7 @@ class T_NetWork(threading.Thread):
 
     def run(self):
         serialNo = 1
-        url = "http://%s:3000/mmt/create?token=TOKEN" % SVRIP
+        url = "http://%s:3000/mmt" % SVRIP
         while(1):
             bullet = jsonQ.get()
             folderLocation = './data/%s' % datetime.date.today()
@@ -72,16 +132,30 @@ class T_NetWork(threading.Thread):
             else:
                 os.mkdir(folderLocation)
 
-            fileLocation = '%s/cardRegistry' % folderLocation
-            cardRegistryFile = open(fileLocation, 'a', 0)
-
-            cardRegistryFile.write ("Msg %d: %s is ready to send to %s\n" % (serialNo, url, bullet))
             try :
+                fileLocation = '%s/cardRegistry.log' % folderLocation
+                cardRegistryFile = open(fileLocation, 'a', 0)
+
+                logString = "Msg %d: %s is ready to send to %s\n" % (serialNo, url, bullet)
+                cardRegistryFile.write (logString)
+
+                if(DEBUGMODE == True):
+                        print logString  
+
                 r = requests.post(url, data=bullet)
-                cardRegistryFile.write("Msg %d response: %s\n" % (serialNo, r.content))
+                logString = "Msg %d response: %s\n" % (serialNo, r.content)
+                cardRegistryFile.write(logString)
+
+                if(DEBUGMODE == True):
+                    print logString  
+
             except Exception, e:
                 cardRegistryFile.write(str(e))
                 cardRegistryFile.write('\n')
+
+                if(DEBUGMODE == True):
+                    print str(e) 
+
             serialNo += 1
 
         
@@ -233,7 +307,9 @@ class CardManager():
             return False
 
         if(DEBUGMODE == True):
-            print binascii.hexlify(buf)
+            logStr = binascii.hexlify(buf)
+            logging.info(logStr)
+            print logStr
 
         if ((buf[0] == b'\x7E')
             and (buf[1] == b'\x3E')
@@ -244,6 +320,8 @@ class CardManager():
         else:
             if(DEBUGMODE == True):
                 print "revceive illegal message"
+                logging.info("revceive illegal message")
+
             return False
 
     def sendJson(self, cardNum, cards, timeString):
@@ -329,6 +407,8 @@ if __name__ == '__main__':
     threads.append(T_Serial())
     # creat network thread
     threads.append(T_NetWork())
+    # creat network thread
+    threads.append(T_Uploader())
 
     # start threads
     for t in threads:
