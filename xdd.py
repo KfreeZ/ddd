@@ -15,7 +15,7 @@ import os
 
 DEVICEID = 1
 DEBUGMODE = True
-SVRIP = '192.168.123.104'
+SVRIP = '121.41.49.137'
 
 class T_SnapShot(threading.Thread):
     def initCam(self):
@@ -32,13 +32,13 @@ class T_SnapShot(threading.Thread):
         global permissionToSnapshot
         while (1):
             permissionToSnapshot.wait()
-            picfolderLocation = './data/%s' % datetime.date.today()
+            picfolderLocation = '/home/pi/xdd/data/%s' % datetime.date.today()
             if os.path.isdir(picfolderLocation):
                 pass
             else:
                 os.mkdir(picfolderLocation)
 
-            timeString = time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
+            timeString = time.strftime('%Y-%m-%dH%HM%MS%S',time.localtime(time.time()))
 
             if(DEBUGMODE == True):
                 threadname = threading.currentThread().getName()
@@ -63,7 +63,7 @@ class T_Uploader(threading.Thread):
             # wait 2s for the snapshot thread to create pic
             time.sleep(2)
             try :
-                folderLocation = './data/%s' % datetime.date.today()
+                folderLocation = '/home/pi/xdd/data/%s' % datetime.date.today()
                 if os.path.isdir(folderLocation):
                     pass
                 else:
@@ -72,7 +72,7 @@ class T_Uploader(threading.Thread):
                 fileLocation = '%s/upload.log' % folderLocation
                 uploadLogFile = open(fileLocation, 'a', 0)
 
-                url = 'http://%s:3000/image' % SVRIP
+                url = 'http://%s:3000/image/create' % SVRIP
 
                 logString = "MSg %d: upload %s to server %s\n" % (sequenceNo, pic, url)
                 uploadLogFile.write(logString)
@@ -80,7 +80,10 @@ class T_Uploader(threading.Thread):
                 if(DEBUGMODE == True):
                     print logString                    
 
-                createTime = pic[18:36]
+                createTime = pic[29:48]
+		createTime = createTime.replace('H', ' ')
+	        createTime = createTime.replace('M', ':')
+                createTime = createTime.replace('S', ':')                
                 snapShot = {'upload': ('pic', open(pic, 'rb'), 'image/jpeg')}
                 record = {
                     'create_time' : createTime,
@@ -123,10 +126,10 @@ class T_NetWork(threading.Thread):
 
     def run(self):
         serialNo = 1
-        url = "http://%s:3000/mmt" % SVRIP
+        url = "http://%s:3000/mmt/create" % SVRIP
         while(1):
             bullet = jsonQ.get()
-            folderLocation = './data/%s' % datetime.date.today()
+            folderLocation = '/home/pi/xdd/data/%s' % datetime.date.today()
             if os.path.isdir(folderLocation):
                 pass
             else:
@@ -389,12 +392,12 @@ class CardManager():
                 self.stopCapture()
 
 if __name__ == '__main__':
-    LOG_FILE = "./debug.log"
+    LOG_FILE = "/home/pi/xdd/debug.log"
     logging.basicConfig(filename=LOG_FILE,level=logging.DEBUG)
-    if os.path.isdir('./data'):
+    if os.path.isdir('/home/pi/xdd/data'):
         pass
     else:
-        os.mkdir('./data')
+        os.mkdir('/home/pi/xdd/data')
 
     permissionToSnapshot = threading.Event()
     jsonQ = Queue()
