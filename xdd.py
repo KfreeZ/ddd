@@ -16,11 +16,12 @@ import os
 DEVICEID = 1
 DEBUGMODE = True
 SVRIP = '121.41.49.137'
+MAXPICONCARD = 200
 
 class T_SnapShot(threading.Thread):
     def initCam(self):
         self.camera = picamera.PiCamera()
-        self.camera.resolution = (2592, 1944)
+        self.camera.resolution = (640, 480)
         self.camera.start_preview()
 
     def __init__(self):
@@ -30,6 +31,10 @@ class T_SnapShot(threading.Thread):
 
     def run(self):
         global permissionToSnapshot
+
+        # make a FIFO queue to hold the pics, is queue is full, delete old one before snapshot new one
+        picQ = Queue(MAXPICONCARD)
+
         while (1):
             permissionToSnapshot.wait()
             picfolderLocation = '/home/pi/xdd/data/%s' % datetime.date.today()
@@ -48,6 +53,12 @@ class T_SnapShot(threading.Thread):
 
             picName = '%s/%s.jpg' % (picfolderLocation, timeString)
             self.camera.capture(picName)
+
+	    # keep the pic under maximum number
+	    picQ.put(picName)
+	    if (picQ.full())
+	        os.remove(picQ.get())
+            
             time.sleep(1)
             fileQ.put(picName)
 
