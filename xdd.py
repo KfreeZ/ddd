@@ -56,7 +56,7 @@ class T_SnapShot(threading.Thread):
 
 	    # keep the pic under maximum number
 	    picQ.put(picName)
-	    if (picQ.full())
+	    if (picQ.full()):
 	        os.remove(picQ.get())
             
             time.sleep(1)
