@@ -409,7 +409,7 @@ if __name__ == '__main__':
     else:
         os.mkdir('/home/pi/xdd/data')
 
-    LOG_FILE = "/home/pi/xdd/debug.log"
+    LOG_FILE = "/home/pi/xdd/data/debug.log"
     logging.basicConfig(filename=LOG_FILE,level=logging.DEBUG)
 
     permissionToSnapshot = threading.Event()
