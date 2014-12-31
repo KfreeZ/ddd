@@ -403,12 +403,14 @@ class CardManager():
                 self.stopCapture()
 
 if __name__ == '__main__':
-    LOG_FILE = "/home/pi/xdd/debug.log"
-    logging.basicConfig(filename=LOG_FILE,level=logging.DEBUG)
+
     if os.path.isdir('/home/pi/xdd/data'):
         pass
     else:
         os.mkdir('/home/pi/xdd/data')
+
+    LOG_FILE = "/home/pi/xdd/debug.log"
+    logging.basicConfig(filename=LOG_FILE,level=logging.DEBUG)
 
     permissionToSnapshot = threading.Event()
     jsonQ = Queue()
