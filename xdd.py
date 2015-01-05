@@ -21,7 +21,7 @@ MAX_PIC_ONCARD = 100
 class T_SnapShot(threading.Thread):
     def initCam(self):
         self.camera = picamera.PiCamera()
-        self.camera.resolution = (2592, 1944)
+        self.camera.resolution = (640, 480)
         self.camera.start_preview()
 
     def __init__(self):
