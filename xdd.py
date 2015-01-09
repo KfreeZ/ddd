@@ -4,7 +4,6 @@ import string, threading, time, datetime
 import serial
 import crc16
 import struct
-import bitstring
 import binascii
 import logging
 import json
@@ -37,7 +36,7 @@ class T_SnapShot(threading.Thread):
 
         while (1):
             permissionToSnapshot.wait()
-            picfolderLocation = '/home/pi/xdd/data/%s' % datetime.date.today()
+            picfolderLocation = '/home/pi/ddd/data/%s' % datetime.date.today()
             if os.path.isdir(picfolderLocation):
                 pass
             else:
@@ -74,7 +73,7 @@ class T_Uploader(threading.Thread):
             # wait 2s for the snapshot thread to create pic
             time.sleep(2)
             try :
-                folderLocation = '/home/pi/xdd/data/%s' % datetime.date.today()
+                folderLocation = '/home/pi/ddd/data/%s' % datetime.date.today()
                 if os.path.isdir(folderLocation):
                     pass
                 else:
@@ -140,7 +139,7 @@ class T_NetWork(threading.Thread):
         url = "http://%s:3000/mmt/create" % SVRIP
         while(1):
             bullet = jsonQ.get()
-            folderLocation = '/home/pi/xdd/data/%s' % datetime.date.today()
+            folderLocation = '/home/pi/ddd/data/%s' % datetime.date.today()
             if os.path.isdir(folderLocation):
                 pass
             else:
@@ -404,12 +403,12 @@ class CardManager():
 
 if __name__ == '__main__':
 
-    if os.path.isdir('/home/pi/xdd/data'):
+    if os.path.isdir('/home/pi/ddd/data'):
         pass
     else:
-        os.mkdir('/home/pi/xdd/data')
+        os.mkdir('/home/pi/ddd/data')
 
-    LOG_FILE = "/home/pi/xdd/data/debug.log"
+    LOG_FILE = "/home/pi/ddd/data/debug.log"
     logging.basicConfig(filename=LOG_FILE,level=logging.DEBUG)
 
     permissionToSnapshot = threading.Event()
