@@ -15,6 +15,6 @@ pip install requests
 
 sudo apt-get install samba samba-common-bin
 
-sudo smbpasswd -a ddd
+sudo smbpasswd -a pi
 
 sudo cp /home/pi/ddd/smb.conf /etc/samba/smb.conf
