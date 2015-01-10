@@ -394,7 +394,12 @@ class CardManager():
         while (1):
             self.sendQueryCmd(devId, self.getPrevAddr(), self.getPrevSn())
             time.sleep(1)
-            rcvd = CardManager.mySerial.read(150)
+
+            try:
+            	rcvd = CardManager.mySerial.read(150)
+            except Exception, e:
+            	print (e)
+
             if self.rcvLegalMsg(rcvd):
                 self.saveResults(rcvd)
                 self.startCapture()
