@@ -9,14 +9,18 @@ sudo python setup.py install
 
 sudo apt-get install python-pip
 
-pip install bitstring
+sudo pip install bitstring
 
-pip install requests
+sudo pip install requests
 
 sudo apt-get install samba samba-common-bin
 
 sudo smbpasswd -a pi
 
-sudo cp /home/pi/ddd/smb.conf /etc/samba/smb.conf
+sudo cp /home/pi/ddd/smb.conf /etc/samba/
 
 sudo cp /home/pi/ddd/rc.local /etc/
+
+sudo cp /home/pi/ddd/cmdline.txt /boot/
+
+sudo cp /home/pi/ddd/inittab /etc/
