@@ -11,6 +11,7 @@ import requests
 from Queue import Queue
 import urllib2
 import os
+import bitstring
 
 DEVICEID = 1
 DEBUGMODE = True
