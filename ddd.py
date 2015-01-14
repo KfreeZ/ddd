@@ -151,7 +151,7 @@ class T_NetWork(threading.Thread):
                 fileLocation = '%s/cardRegistry.log' % folderLocation
                 cardRegistryFile = open(fileLocation, 'a', 0)
 
-                logString = "Msg %d: %s is ready to send to %s\n" % (serialNo, url, bullet)
+                logString = "Msg %d: %s is ready to send to %s\n" % (serialNo, bullet, url)
                 cardRegistryFile.write (logString)
 
                 if(DEBUGMODE == True):
@@ -368,6 +368,7 @@ class CardManager():
                 name = threading.currentThread().getName()
                 logStr = "%s: get card %s at %s " % (name, cardId, timeString)
                 print logStr
+		# print timeStamp
                 logging.info(logStr)
             cardString.append(cardId)
 
