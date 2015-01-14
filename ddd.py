@@ -126,7 +126,8 @@ class T_Serial(threading.Thread):
 
     def run(self):
         self._cdMngr.initCardRcvr(DEVICEID)
-        time.sleep(1)
+        #wait 10s for ddd to get initialized
+        time.sleep(10)
         self._cdMngr.setCardRcvrTime()
         self._cdMngr.queryCards(DEVICEID)
 
@@ -264,7 +265,7 @@ class MsgParser:
                                      cardInfoArray[4]])
         bId = bitstring.BitArray(cardIdByteArray)
         del bId[:4]
-        return "%s" % bId.hex
+        return "%s" % bId.uint
 
     def getTimeStamp(self, cardInfoArray):
         tsByteArray = bytearray([cardInfoArray[5],
