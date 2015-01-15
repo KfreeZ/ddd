@@ -17,6 +17,7 @@ DEVICEID = 1
 DEBUGMODE = True
 SVRIP = '121.41.49.137'
 MAX_PIC_ONCARD = 100
+MAX_READ_TIME = 20
 
 class T_SnapShot(threading.Thread):
     def initCam(self):
@@ -354,6 +355,91 @@ class CardManager():
         jsonQ.put(cardJson)
 
 
+    def handleCard(self, cardId):
+        # reture true before done
+        return True
+        # this dict is used to save the cards have been recorded but not long enough to put into blacklist
+        global oldGreyList = {}
+        global newGreyList = {}
+
+        # this dict is used to save the cards have been recorded at max time, they will not be reported
+        global oldBlackList = {}
+        global newBlackList = {}
+
+        # card is new, add to new greyList, report
+        if (!greylist.has_key(cardId) && !blackList.has_key(cardId)):
+            newGreyList.update({cardId, 1})
+            
+            if(DEBUGMODE == True):
+                logStr = "card: %d is added into greyList" % cardId
+                logging.info(logStr)
+                print logStr
+
+            return True
+
+        # card is not new but not in blacklist, incr the counter, add to new greylist, report
+        if (greyList.has_key(cardId) && !blackList.has_key(cardId)):
+            # not read MAX_READ_TIME, stay in greylist
+            if (greyList[cardId] < MAX_READ_TIME -1):
+                newGreyList.update({cardId, greyList[cardId]+1 })
+
+                if(DEBUGMODE == True):
+                    logStr = "card: %d is stay in greyList, count: %d" % (cardId, greyList[cardId])
+                    logging.info(logStr)
+                    print logStr
+                
+                return True
+
+            # reach MAX_READ_TIME, transfer to blacklist    
+            else if (greyList[cardId] = MAX_READ_TIME -1):
+                newBlackList.update({cardId, MAX_READ_TIME})
+
+                if(DEBUGMODE == True):
+                    logStr = "card: %d is transfer to blackList" % cardId
+                    logging.info(logStr)
+                    print logStr
+                
+                return True
+            
+            #exception
+            else:
+
+                if(DEBUGMODE == True):
+                    logStr =  "greyList overflow, card: %d" % cardId
+                    logging.info(logStr)
+                    print logStr
+
+                return False
+
+        # card is in blacklist, don't report
+        if (!greyList.has_key(cardId) && blackList.has_key(cardId)):
+            newBlackList.update({cardId, MAX_READ_TIME})
+
+            if(DEBUGMODE == True):
+                logStr = "card: %d is stay in blackList" % cardId
+                logging.info(logStr)
+                print logStr
+
+            return False
+
+        # exception
+        else:
+            if(DEBUGMODE == True):
+                logStr = "meet some erroe when handle card: %d" % cardId
+                logging.info(logStr)
+            return False
+
+
+    def updateGreyList(self):
+        oldGreyList.clear()
+        oldGreyList = newGreyList.clone()
+        newGreyList.clear()
+
+    def updateBlackList(self):
+        oldBlackList.clear()
+        oldBlackList = newBlackList.clone()
+        newBlackList.clear(）
+
 
     def saveResults(self, buf):
         cardNum = CardManager.msgParser.getCardCnt(ord(buf[6]))
@@ -363,19 +449,31 @@ class CardManager():
         # get the system time instead of rcvr time for now
         timeString = time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))
         cardString = []
+
+        # handle all the card in the buffer, if it is in the blacklist it shall not be reported
         for x in xrange(0, cardNum):
             cardInfoByteArray = CardManager.msgParser.getCardInfo(buf, x)
             cardId = CardManager.msgParser.getCardId(cardInfoByteArray)
             # timeStamp = CardManager.msgParser.getTimeStamp(cardInfoByteArray)
+
             if(DEBUGMODE == True):
                 name = threading.currentThread().getName()
                 logStr = "%s: get card %s at %s " % (name, cardId, timeString)
                 print logStr
-		# print timeStamp
+		        # print timeStamp
                 logging.info(logStr)
-            cardString.append(cardId)
+
+            # determine if the card need to be reported
+            if(self.handleCard(cardId)):
+                cardString.append(cardId)
 
         self.sendJson(cardNum, cardString, timeString)
+
+        # use the rcvdCards to update the blacklist and grey list
+        # if the cards in the grey list is not reported this time, it will be removed
+        updateGreyList()
+
+        updateBlackList()
 
 
 
