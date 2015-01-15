@@ -312,6 +312,9 @@ class CardManager():
     def setCardRcvrTime(self):
         setTimeCmd = CardManager.cmdGnrtr.gnrtSetTimeCmd()
         CardManager.mySerial.write(setTimeCmd)
+        if(DEBUGMODE == True):
+            print "set time to card receiver"
+            logging.info("set time to card receiver")
 
     def sendQueryCmd(self, devId, lastAddr, lastSn):
         queryCmd = CardManager.cmdGnrtr.gnrtQueryCmd(devId, lastAddr, lastSn)
