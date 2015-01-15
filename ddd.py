@@ -390,7 +390,7 @@ class CardManager():
     def stopCapture(self):
         self.setPrevAddr(0xFF)
         self.setPrevSn(0x00)
-        if(DEBUGMODE == True):
+        # if(DEBUGMODE == True):
             # print "capture siezed"
         permissionToSnapshot.clear()
 
