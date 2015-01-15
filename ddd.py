@@ -380,7 +380,7 @@ class CardManager():
         if(DEBUGMODE == True):
             # print ord(self.getPrevAddr())
             # print ord(self.getPrevSn())
-            print "start capture"
+            # print "start capture"
         permissionToSnapshot.set()
 
 
@@ -388,13 +388,20 @@ class CardManager():
         self.setPrevAddr(0xFF)
         self.setPrevSn(0x00)
         if(DEBUGMODE == True):
-            print "capture siezed"
+            # print "capture siezed"
         permissionToSnapshot.clear()
 
     def queryCards(self, devId):
         self.setPrevAddr(0xFF)
         self.setPrevSn(0x00)
+        timingCnt = 0
         while (1):
+            # set card receiver's time every 8 hours
+            timingCnt += 1
+            if (timingCnt == 60*60*8):
+            	self.setCardRcvrTime()
+           	timingCnt = 0
+         
             self.sendQueryCmd(devId, self.getPrevAddr(), self.getPrevSn())
             time.sleep(1)
             rcvd = CardManager.mySerial.read(150)
