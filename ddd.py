@@ -380,7 +380,7 @@ class CardManager():
 
 
     def startCapture(self):
-        if(DEBUGMODE == True):
+        # if(DEBUGMODE == True):
             # print ord(self.getPrevAddr())
             # print ord(self.getPrevSn())
             # print "start capture"
