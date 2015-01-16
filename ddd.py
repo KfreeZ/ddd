@@ -359,16 +359,16 @@ class CardManager():
         UPDATED = True
 
         # this dict is used to save the cards have been recorded but not long enough to put into blacklist
-        global greyList = {}
+        global greyList = dict()
 
 
         # this dict is used to save the cards have been recorded at max time, they will not be reported
-        global blackList = {}
+        global blackList = dict()
 
 
         # card is new, add to new greyList, report
         if (!greylist.has_key(cardId) && !blackList.has_key(cardId)):
-            greyList.update({cardId, [1, UPDATED]})
+            greyList.update({cardId: [1, UPDATED]})
     
             if(DEBUGMODE == True):
                 logStr = "card: %d is added into greyList" % cardId
@@ -381,7 +381,7 @@ class CardManager():
         if (greyList.has_key(cardId) && !blackList.has_key(cardId)):
             # not read MAX_READ_TIME, stay in greylist
             if (greyList[cardId] < MAX_READ_TIME -1):
-                greyList.update({cardId, [greyList[cardId]+1, UPDATED]})
+                greyList.update({cardId: [greyList[cardId]+1, UPDATED]})
 
                 if(DEBUGMODE == True):
                     logStr = "card: %d is stay in greyList, count: %d" % (cardId, greyList[cardId])
@@ -393,7 +393,7 @@ class CardManager():
             # reach MAX_READ_TIME, transfer to blacklist    
             else if (greyList[cardId] = MAX_READ_TIME -1):
                 greyList.pop(cardId)
-                blackList.update({cardId, [MAX_READ_TIME, UPDATED]})
+                blackList.update({cardId: [MAX_READ_TIME, UPDATED]})
 
                 if(DEBUGMODE == True):
                     logStr = "card: %d is transfer to blackList" % cardId
@@ -414,7 +414,7 @@ class CardManager():
 
         # card is in blacklist, don't report
         if (!greyList.has_key(cardId) && blackList.has_key(cardId)):
-            blackList.update({cardId, [MAX_READ_TIME, UPDATED]})
+            blackList.update({cardId: [MAX_READ_TIME, UPDATED]})
 
             if(DEBUGMODE == True):
                 logStr = "card: %d is stay in blackList" % cardId
