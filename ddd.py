@@ -356,20 +356,20 @@ class CardManager():
 
 
     def handleCard(self, cardId):
-        # reture true before done
-        return True
+        UPDATED = True;
+
         # this dict is used to save the cards have been recorded but not long enough to put into blacklist
-        global oldGreyList = {}
-        global newGreyList = {}
+        global greyList = {}
+
 
         # this dict is used to save the cards have been recorded at max time, they will not be reported
-        global oldBlackList = {}
-        global newBlackList = {}
+        global blackList = {
+
 
         # card is new, add to new greyList, report
         if (!greylist.has_key(cardId) && !blackList.has_key(cardId)):
-            newGreyList.update({cardId, 1})
-            
+            greyList.update({cardId, [1, UPDATED]})
+    
             if(DEBUGMODE == True):
                 logStr = "card: %d is added into greyList" % cardId
                 logging.info(logStr)
@@ -381,7 +381,7 @@ class CardManager():
         if (greyList.has_key(cardId) && !blackList.has_key(cardId)):
             # not read MAX_READ_TIME, stay in greylist
             if (greyList[cardId] < MAX_READ_TIME -1):
-                newGreyList.update({cardId, greyList[cardId]+1 })
+                greyList.update({cardId, [greyList[cardId]+1, UPDATED]})
 
                 if(DEBUGMODE == True):
                     logStr = "card: %d is stay in greyList, count: %d" % (cardId, greyList[cardId])
@@ -392,7 +392,8 @@ class CardManager():
 
             # reach MAX_READ_TIME, transfer to blacklist    
             else if (greyList[cardId] = MAX_READ_TIME -1):
-                newBlackList.update({cardId, MAX_READ_TIME})
+                greyList.pop(cardId)
+                blackList.update({cardId, [MAX_READ_TIME, UPDATED]})
 
                 if(DEBUGMODE == True):
                     logStr = "card: %d is transfer to blackList" % cardId
@@ -413,7 +414,7 @@ class CardManager():
 
         # card is in blacklist, don't report
         if (!greyList.has_key(cardId) && blackList.has_key(cardId)):
-            newBlackList.update({cardId, MAX_READ_TIME})
+            blackList.update({cardId, [MAX_READ_TIME, UPDATED]})
 
             if(DEBUGMODE == True):
                 logStr = "card: %d is stay in blackList" % cardId
@@ -431,14 +432,29 @@ class CardManager():
 
 
     def updateGreyList(self):
-        oldGreyList.clear()
-        oldGreyList = newGreyList.clone()
-        newGreyList.clear()
+        for card in greyList:
+            if (greyList[card][1] != UPDATED):
+                greyList.pop(card)
+                
+                if(DEBUGMODE == True):
+                    logStr = "card: %d is removed from greyList" % card
+                    logging.info(logStr)
+                    print logStr
+            else:
+                greyList[card][1] == False
+
 
     def updateBlackList(self):
-        oldBlackList.clear()
-        oldBlackList = newBlackList.clone()
-        newBlackList.clear(）
+        for card in blackList:
+            if (blackList[card][1] != UPDATED):
+                blackList.pop(card)
+                
+                if(DEBUGMODE == True):
+                    logStr = "card: %d is removed from blackList" % card
+                    logging.info(logStr)
+                    print logStr
+            else:
+                blackList[card][1] == False
 
 
     def saveResults(self, buf):
