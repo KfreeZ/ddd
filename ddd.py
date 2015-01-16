@@ -369,7 +369,7 @@ class CardManager():
 
 
         # card is new, add to new greyList, report
-        if ((False == greylist.has_key(cardId)) and (False == blackList.has_key(cardId)):
+        if ((False == greylist.has_key(cardId)) and (False == blackList.has_key(cardId))):
             greyList.update({cardId: [1, UPDATED]})
     
             if(DEBUGMODE == True):
@@ -393,7 +393,7 @@ class CardManager():
                 return True
 
             # reach MAX_READ_TIME, transfer to blacklist    
-            else if (greyList[cardId] = MAX_READ_TIME -1):
+            else if (greyList[cardId] == MAX_READ_TIME -1):
                 greyList.pop(cardId)
                 blackList.update({cardId: [MAX_READ_TIME, UPDATED]})
 
@@ -415,7 +415,7 @@ class CardManager():
                 return False
 
         # card is in blacklist, don't report
-        if ((False == greyList.has_key(cardId)) && (True == blackList.has_key(cardId))):
+        if ((False == greyList.has_key(cardId)) and (True == blackList.has_key(cardId))):
             blackList.update({cardId: [MAX_READ_TIME, UPDATED]})
 
             if(DEBUGMODE == True):
