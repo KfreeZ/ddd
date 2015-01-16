@@ -359,11 +359,13 @@ class CardManager():
         UPDATED = True
 
         # this dict is used to save the cards have been recorded but not long enough to put into blacklist
-        global greyList = dict()
+        global greyList
+        greyList = dict()
 
 
         # this dict is used to save the cards have been recorded at max time, they will not be reported
-        global blackList = dict()
+        global blackList
+        blackList = dict()
 
 
         # card is new, add to new greyList, report
