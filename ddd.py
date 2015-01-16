@@ -537,7 +537,7 @@ if __name__ == '__main__':
     else:
         os.mkdir('/home/pi/ddd/data')
 
-    LOG_FILE = "/home/pi/ddd/data/debug.log"
+    LOG_FILE = "/home/pi/ddd/data/debug-%s.log" % datetime.date.today()
     logging.basicConfig(filename=LOG_FILE,level=logging.DEBUG)
 
     permissionToSnapshot = threading.Event()
